@@ -1,0 +1,109 @@
+﻿@using BlazorWebApp.Services
+@rendermode InteractiveServer
+@implements IDisposable
+@inject ToastService toastService
+
+@if (IsVisible)
+{
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055;">
+        <div class="toast show align-items-center text-white bg-@GetBackgroundClass()
+                        border-0 shadow-lg" role="alert">
+            <div class="d-flex align-items-center">
+                <div class="toast-body fw-semibold">
+                    <i class="bi @GetIconClass() me-2"></i>@Message
+                </div>
+
+                @if (!string.IsNullOrEmpty(ActionLabel) && _actionCallback != null)
+                {
+                    <button type="button"
+                            class="btn btn-sm btn-light text-dark fw-semibold me-2"
+                            @onclick="InvokeActionAsync">
+                        @ActionLabel
+                    </button>
+                }
+
+                <button type="button" class="btn-close btn-close-white me-2"
+                        @onclick="CloseToast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool IsVisible { get; set; }
+    private string Message { get; set; } = "";
+    private ToastLevel Level { get; set; }
+    private string? ActionLabel { get; set; }
+    private Func<Task>? _actionCallback;
+    private CancellationTokenSource? _hideCts;
+
+    protected override void OnInitialized()
+    {
+        toastService.OnShow += ShowToast;
+        toastService.OnShowWithAction += ShowToastWithAction;
+    }
+
+    private void ShowToast(string message, ToastLevel level)
+        => ShowToastWithAction(message, level, null!, null!);
+
+    private async void ShowToastWithAction(string message, ToastLevel level,
+                                            string actionLabel, Func<Task> action)
+    {
+        _hideCts?.Cancel();
+        _hideCts?.Dispose();
+        _hideCts = new CancellationTokenSource();
+        var token = _hideCts.Token;
+
+        Message = message;
+        Level = level;
+        ActionLabel = string.IsNullOrWhiteSpace(actionLabel) ? null : actionLabel;
+        _actionCallback = action;
+
+        IsVisible = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            int delay = _actionCallback != null ? 8000 : 3000;
+            await Task.Delay(delay, token);
+            IsVisible = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task InvokeActionAsync()
+    {
+        var cb = _actionCallback;
+        _hideCts?.Cancel();
+        IsVisible = false;
+        StateHasChanged();
+        if (cb != null) await cb.Invoke();
+    }
+
+    private void CloseToast() { _hideCts?.Cancel(); IsVisible = false; }
+
+    private string GetBackgroundClass() => Level switch
+    {
+        ToastLevel.Success => "success",
+        ToastLevel.Error => "danger",
+        ToastLevel.Warning => "warning",
+        _ => "primary"
+    };
+
+    private string GetIconClass() => Level switch
+    {
+        ToastLevel.Success => "bi-check-circle",
+        ToastLevel.Error => "bi-exclamation-triangle",
+        ToastLevel.Warning => "bi-exclamation-circle",
+        _ => "bi-info-circle"
+    };
+
+    public void Dispose()
+    {
+        toastService.OnShow -= ShowToast;
+        toastService.OnShowWithAction -= ShowToastWithAction;
+        _hideCts?.Cancel();
+        _hideCts?.Dispose();
+    }
+}

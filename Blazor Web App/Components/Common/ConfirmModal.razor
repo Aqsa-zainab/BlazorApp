@@ -1,0 +1,89 @@
+﻿@if (IsOpen)
+{
+    <div class="modal fade show d-block"
+         tabindex="-1"
+         style="background-color: rgba(0,0,0,0.5);"
+         @onkeydown="OnKeyDown">
+
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+
+                <div class="modal-header bg-@Variant bg-opacity-10 border-bottom-0 pb-0">
+                    <h5 class="modal-title text-dark fw-bold">
+                        <i class="bi @IconClass text-@Variant me-2"></i>@Title
+                    </h5>
+                    <button type="button" class="btn-close"
+                            @onclick="() => CloseAsync(false)"
+                            aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body py-4">
+                    <p class="text-muted mb-0">@Message</p>
+                </div>
+
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button"
+                            class="btn btn-light px-3 border"
+                            @onclick="() => CloseAsync(false)">
+                        @CancelButtonText
+                    </button>
+                    <button type="button"
+                            class="btn btn-@Variant px-4 shadow-sm"
+                            @onclick="() => CloseAsync(true)">
+                        @ConfirmButtonText
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string Message { get; set; } = "Are you sure you want to proceed?";
+    [Parameter] public string ConfirmButtonText { get; set; } = "Confirm";
+    [Parameter] public string CancelButtonText { get; set; } = "Cancel";
+    [Parameter] public string Variant { get; set; } = "danger";   // danger | warning | primary | success
+    [Parameter] public EventCallback<bool> OnClose { get; set; }
+
+    private bool IsOpen { get; set; }
+
+    private string IconClass => Variant switch
+    {
+        "warning" => "bi-exclamation-triangle-fill",
+        "primary" => "bi-question-circle-fill",
+        "success" => "bi-check-circle-fill",
+        _ => "bi-exclamation-triangle-fill"
+    };
+
+    public void Show()
+    {
+        IsOpen = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        IsOpen = false;
+        StateHasChanged();
+    }
+
+    private async Task CloseAsync(bool confirmed)
+    {
+        IsOpen = false;
+        await OnClose.InvokeAsync(confirmed);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await CloseAsync(false);
+        }
+        else if (e.Key == "Enter")
+        {
+            await CloseAsync(true);
+        }
+    }
+}

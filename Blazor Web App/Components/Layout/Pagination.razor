@@ -1,0 +1,92 @@
+﻿@if (TotalPages > 0)
+{
+    <div class="card-footer bg-white border-top py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+        <span class="text-muted small">
+            Showing
+            <span class="fw-bold text-dark">@CurrentPage</span>
+            of <span class="fw-bold text-dark">@TotalPages</span> pages
+            <span class="text-secondary">(Total: @TotalRecords)</span>
+        </span>
+
+        <nav aria-label="Pagination">
+            <ul class="pagination pagination-sm mb-0 shadow-sm">
+
+                <li class="page-item @(CurrentPage <= 1 ? "disabled" : "")">
+                    <button class="page-link text-dark"
+                            @onclick="() => GoTo(CurrentPage - 1)"
+                            disabled="@(CurrentPage <= 1)">
+                        &laquo;
+                    </button>
+                </li>
+
+                @foreach (var p in GetPageWindow())
+                {
+                    if (p == -1)
+                    {
+                        <li class="page-item disabled">
+                            <span class="page-link text-muted">…</span>
+                        </li>
+                    }
+                    else
+                    {
+                        int pageNumber = p;
+                        <li class="page-item @(CurrentPage == pageNumber ? "active" : "")">
+                            <button class="page-link"
+                                    @onclick="() => GoTo(pageNumber)">
+                                @pageNumber
+                            </button>
+                        </li>
+                    }
+                }
+
+                <li class="page-item @(CurrentPage >= TotalPages ? "disabled" : "")">
+                    <button class="page-link text-dark"
+                            @onclick="() => GoTo(CurrentPage + 1)"
+                            disabled="@(CurrentPage >= TotalPages)">
+                        &raquo;
+                    </button>
+                </li>
+
+            </ul>
+        </nav>
+    </div>
+}
+
+@code {
+    [Parameter] public int CurrentPage { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int TotalRecords { get; set; }
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+
+    private async Task GoTo(int page)
+    {
+        if (page < 1 || page > TotalPages || page == CurrentPage) return;
+        await OnPageChanged.InvokeAsync(page);
+    }
+
+    /// <summary>
+    /// Returns a compact window of page numbers, e.g. 1 … 4 5 6 … 20
+    /// Uses -1 as the "ellipsis" sentinel.
+    /// </summary>
+    private IEnumerable<int> GetPageWindow()
+    {
+        const int window = 2;                 // pages on each side of current
+        var result = new List<int>();
+
+        int start = Math.Max(2, CurrentPage - window);
+        int end = Math.Min(TotalPages - 1, CurrentPage + window);
+
+        result.Add(1);
+
+        if (start > 2) result.Add(-1);
+
+        for (int i = start; i <= end; i++) result.Add(i);
+
+        if (end < TotalPages - 1) result.Add(-1);
+
+        if (TotalPages > 1) result.Add(TotalPages);
+
+        return result;
+    }
+}

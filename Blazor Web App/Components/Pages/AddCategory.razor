@@ -1,0 +1,386 @@
+﻿@page "/Add-Category"
+@implements IDisposable
+@rendermode InteractiveServer
+@using BlazorWebApp.Models
+@using BlazorWebApp.Models.Category
+@using BlazorWebApp.Services
+@using BlazorWebApp.Components.Layout
+@using BlazorWebApp.Components.Common
+@inject NavigationManager Nav
+
+<PageTitle>Manage Categories</PageTitle>
+
+<div class="container-fluid mt-3" style="max-width: 1100px;">
+
+    <div class="d-flex justify-content-between align-items-end mb-3">
+        <div>
+            <h3 class="fw-bold text-dark mb-0">
+                <i class="bi bi-tags me-2 text-primary"></i>Inventory Categories
+            </h3>
+            <span class="text-muted small">Create, edit, and manage product categories</span>
+        </div>
+        <div class="small text-muted">
+            <kbd>F2</kbd> New · <kbd>Alt+F</kbd> Search · <kbd>Alt+S</kbd> Save · <kbd>Esc</kbd> Cancel
+        </div>
+    </div>
+
+    @if (hasDraft && !isEditing)
+    {
+        <div class="alert alert-warning d-flex align-items-center py-2 mb-3">
+            <i class="bi bi-archive me-2"></i>
+            <span class="flex-grow-1 small">Unsaved draft recovered from your last session.</span>
+            <button class="btn btn-sm btn-link text-decoration-none" @onclick="DiscardDraft">Discard</button>
+        </div>
+    }
+
+    <!-- ================= FORM ================= -->
+    <div class="card border-0 shadow-sm mb-4 rounded-3 d-print-none"
+         id="categoryFormContainer"
+         @onkeydown="OnWrapperKeyDown">
+
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center">
+            <h6 class="mb-0 text-primary fw-bold">
+                <i class="bi @(isEditing ? "bi-pencil-square" : "bi-folder-plus") me-2"></i>
+                @(isEditing ? "Edit Category" : "New Category")
+            </h6>
+            @if (isEditing)
+            {
+                <span class="badge bg-warning text-dark ms-3">Editing #@editingCategoryId</span>
+            }
+            @if (HasUnsavedChanges && !isSaving)
+            {
+                <span class="badge bg-info bg-opacity-25 text-info-emphasis ms-2">
+                    <i class="bi bi-pencil me-1"></i>Unsaved
+                </span>
+            }
+        </div>
+
+        <div class="card-body p-4">
+            <EditForm Model="newCategory" OnValidSubmit="SaveCategory">
+                <DataAnnotationsValidator />
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small fw-bold text-uppercase">
+                            Category Title <span class="text-danger">*</span>
+                        </label>
+
+                        <input @ref="titleRef"
+                               id="categoryTitleInput"
+                               class="form-control form-control-lg"
+                               @bind="newCategory.CategoryTitle"
+                               @bind:event="oninput"
+                               @onkeydown="OnTitleKeyDown"
+                               @onblur="ValidateTitleBlur"
+                               placeholder="e.g. Beverages" />
+
+                        <div class="d-flex justify-content-between mt-1">
+                            @if (!string.IsNullOrWhiteSpace(titleError))
+                            {
+                                <small class="text-danger">@titleError</small>
+                            }
+                            <small class="@CounterClass(newCategory.CategoryTitle, 100) ms-auto">
+                                @(newCategory.CategoryTitle?.Length ?? 0)/100
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small fw-bold text-uppercase">
+                            Category Name (Urdu)
+                        </label>
+
+                        <input @ref="urduRef"
+                               class="form-control form-control-lg text-end"
+                               @bind="newCategory.CategoryNameInUrdu"
+                               @bind:event="oninput"
+                               @onkeydown="OnUrduKeyDown"
+                               dir="rtl"
+                               placeholder="مشروبات" />
+
+                        <div class="d-flex justify-content-between mt-1">
+                            <small class="@CounterClass(newCategory.CategoryNameInUrdu, 100) ms-auto">
+                                @(newCategory.CategoryNameInUrdu?.Length ?? 0)/100
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <div class="form-check form-switch">
+                        <input type="checkbox"
+                               class="form-check-input"
+                               id="chkInactive"
+                               @bind="newCategory.InActive" />
+                        <label class="form-check-label text-muted ms-2" for="chkInactive">
+                            Mark as Inactive
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        @if (isEditing || !string.IsNullOrWhiteSpace(newCategory.CategoryTitle))
+                        {
+                            <button type="button" class="btn btn-light border"
+                                    @onclick="ResetForm" disabled="@isSaving">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                            </button>
+                            <button type="button" class="btn btn-light border"
+                                    @onclick="CancelEdit" disabled="@isSaving">
+                                <i class="bi bi-x-lg me-1"></i>Cancel
+                            </button>
+                        }
+
+                        <button type="submit"
+                                class="btn @(isEditing ? "btn-success" : "btn-primary") px-4 shadow-sm"
+                                disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-save me-2"></i>
+                                <span>@(isEditing ? "Update Category" : "Save Category")</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <!-- ================= LIST ================= -->
+    <div class="card border-0 shadow-sm rounded-3">
+
+        <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap gap-2
+                    justify-content-between align-items-center d-print-none">
+
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="bi bi-table me-2"></i>Saved Categories
+                @if (totalRecords > 0)
+                {
+                    <span class="badge bg-secondary ms-2">@totalRecords</span>
+                }
+            </h6>
+
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                @if (selectedIds.Any())
+                {
+                    <button class="btn btn-sm btn-danger" @onclick="DeleteSelected">
+                        <i class="bi bi-trash3 me-1"></i>Delete (@selectedIds.Count)
+                    </button>
+                }
+
+                <select class="form-select form-select-sm" style="width:auto;"
+                        value="@pageSize" @onchange="OnPageSizeChanged">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                    <option value="100">100 / page</option>
+                </select>
+
+                <button class="btn btn-sm btn-outline-secondary" @onclick="PrintHint">
+                    <i class="bi bi-printer me-1"></i>Print
+                </button>
+                <button class="btn btn-sm btn-outline-success" @onclick="ExportToExcel">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                </button>
+
+                <div class="input-group input-group-sm" style="width: 240px;">
+                    <span class="input-group-text bg-light border-end-0">
+                        <i class="bi bi-search text-muted"></i>
+                    </span>
+                    <input @ref="searchRef"
+                           type="text"
+                           class="form-control border-start-0 bg-light"
+                           placeholder="Search..."
+                           value="@searchTerm"
+                           @oninput="HandleSearch" />
+                </div>
+            </div>
+        </div>
+
+        <div class="print-header px-4 pt-4">
+            <div class="d-flex justify-content-between align-items-center
+                        border-bottom border-2 border-dark pb-3 mb-4">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-box-seam fs-1 me-3"></i>
+                    <div>
+                        <h2 class="fw-bold mb-0" style="letter-spacing:-1px;">SoftIT ERP</h2>
+                        <span class="text-muted text-uppercase small fw-bold">
+                            Inventory Categories Report
+                        </span>
+                    </div>
+                </div>
+                <div class="text-end small text-muted">
+                    <div><strong>Generated:</strong> @DateTime.Now.ToString("dd-MMM-yyyy hh:mm tt")</div>
+                    <div><strong>Total:</strong> @totalRecords categories</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted small text-uppercase">
+                    <tr>
+                        <th class="ps-4 d-print-none" style="width:40px;">
+                            <input type="checkbox" class="form-check-input"
+                                   checked="@IsAllSelected"
+                                   @onchange="ToggleSelectAll" />
+                        </th>
+
+                        <th style="width:90px;cursor:pointer;" @onclick='() => SortBy("CategoryID")'>
+                            ID <i class="@SortIconClass("CategoryID")"></i>
+                        </th>
+
+                        <th style="cursor:pointer;" @onclick='() => SortBy("CategoryTitle")'>
+                            Title <i class="@SortIconClass("CategoryTitle")"></i>
+                        </th>
+
+                        <th class="text-end" style="cursor:pointer;"
+                            @onclick='() => SortBy("CategoryNameInUrdu")'>
+                            Title (Urdu) <i class="@SortIconClass("CategoryNameInUrdu")"></i>
+                        </th>
+
+                        <th class="text-center" style="width:130px;cursor:pointer;"
+                            @onclick='() => SortBy("InActive")'>
+                            Status <i class="@SortIconClass("InActive")"></i>
+                        </th>
+
+                        <th class="text-end pe-4 d-print-none" style="width:170px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (isLoading)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted p-5">
+                                <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                                Loading...
+                            </td>
+                        </tr>
+                    }
+                    else if (categoryList == null || !categoryList.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted p-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
+                                No categories found.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var cat in SortedCategories)
+                        {
+                            <tr class="@(selectedIds.Contains(cat.CategoryID) ? "table-primary" : "")">
+                                <td class="ps-4 d-print-none">
+                                    <input type="checkbox" class="form-check-input"
+                                           checked="@selectedIds.Contains(cat.CategoryID)"
+                                           @onchange="() => ToggleSelect(cat.CategoryID)" />
+                                </td>
+                                <td class="text-muted fw-bold">#@cat.CategoryID</td>
+                                <td class="fw-semibold text-dark">@cat.CategoryTitle</td>
+                                <td class="text-end text-muted">@cat.CategoryNameInUrdu</td>
+                                <td class="text-center">
+                                    @if (cat.InActive)
+                                    {
+                                        <span class="badge bg-danger bg-opacity-10 text-danger
+                                                                 border border-danger border-opacity-25
+                                                                 px-2 py-1 rounded-pill w-100">Inactive</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success
+                                                                 border border-success border-opacity-25
+                                                                 px-2 py-1 rounded-pill w-100">Active</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4 d-print-none">
+                                    <button class="btn btn-sm btn-light text-primary shadow-sm border me-1"
+                                            @onclick="() => EditCategory(cat)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-light text-secondary shadow-sm border me-1"
+                                            @onclick="() => DuplicateCategory(cat)">
+                                        <i class="bi bi-files"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-light text-danger shadow-sm border"
+                                            @onclick="() => DeleteCategory(cat.CategoryID)">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (totalPages > 0)
+        {
+            <Pagination CurrentPage="currentPage" TotalPages="totalPages"
+                        TotalRecords="totalRecords" OnPageChanged="GoToPage" />
+        }
+    </div>
+</div>
+
+<ConfirmModal @ref="deleteConfirmModal"
+              Title="Delete Category"
+              Message="Are you sure you want to delete this category? This action cannot be undone."
+              ConfirmButtonText="Yes, Delete"
+              CancelButtonText="Cancel"
+              Variant="danger"
+              OnClose="OnConfirmDeleteConfirmed" />
+
+<style>
+    .print-header {
+        display: none;
+    }
+
+    @@media print {
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        .table-responsive {
+            overflow: visible !important;
+        }
+
+        thead {
+            display: table-header-group !important;
+        }
+
+        tr {
+            page-break-inside: avoid;
+        }
+
+        .d-print-none {
+            display: none !important;
+        }
+
+        .print-header {
+            display: block !important;
+        }
+
+        .card {
+            box-shadow: none !important;
+            border: none !important;
+        }
+    }
+
+    @@page {
+        margin: 15mm;
+    }
+
+    kbd {
+        background: #e9ecef;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 0.75rem;
+        color: #495057;
+    }
+</style>
